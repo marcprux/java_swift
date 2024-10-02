@@ -20,7 +20,7 @@ let package = Package(
     ],
     dependencies: [
         .package(
-            url: "https://github.com/PureSwift/CJavaVM.git",
+            url: "https://github.com/marcprux/CJavaVM.git",
             branch: "master"
         ),
     ],
