@@ -86,7 +86,7 @@ fileprivate var jniFatalMessage = pthread_key_t()
 open class JNICore {
 
     open var jvm: UnsafeMutablePointer<JavaVM?>?
-    open var api: JNINativeInterface_!
+    open var api: JNINativeInterface!
     open var classLoader: jobject?
     
     open var threadKey: pthread_t { return pthread_self() }
@@ -117,14 +117,39 @@ open class JNICore {
         return env
     }
 
+    
     open func AttachCurrentThread() -> UnsafeMutablePointer<JNIEnv?>? {
-        var tenv: UnsafeMutablePointer<JNIEnv?>?
-        if withPointerToRawPointer(to: &tenv, {
-            self.jvm?.pointee?.pointee.AttachCurrentThread( self.jvm, $0, nil )
-        } ) != jint(JNI_OK) {
-            report( "Could not attach to background jvm" )
+        let jvm: JNIInvokeInterface = self.jvm!.pointee!.pointee
+
+        var tenv: UnsafeMutableRawPointer?
+        let threadStatus = jvm.GetEnv(self.jvm, &tenv, jint(JNI_VERSION_1_6))
+
+        switch threadStatus {
+        case JNI_OK:
+            let env = tenv!.assumingMemoryBound(to: JNIEnv?.self)
+            return env
+        case JNI_EDETACHED:
+            // we weren't attached to the Java thread; attach, perform the block, and then detach
+            // see https://developer.android.com/training/articles/perf-jni#threads
+            var tenv: UnsafeMutablePointer<JNIEnv?>!
+            if jvm.AttachCurrentThread(self.jvm, &tenv, nil) != JNI_OK {
+                fatalError("SkipJNI: unable to attach JNI to current thread")
+            }
+            return tenv
+        default:
+            fatalError("TODO: attach thread")
         }
-        return tenv
+
+//        var tenv: UnsafeMutablePointer<JNIEnv?>?
+//        let success: jint = withPointerToRawPointer(to: &tenv, { (ptr: UnsafeMutablePointer<UnsafeMutableRawPointer?>) in
+//            let env: UnsafeMutablePointer<UnsafeMutablePointer<JNIEnv?>?>? = ptr
+//            return self.jvm?.pointee?.pointee.AttachCurrentThread( self.jvm, env, nil )
+//        } )
+//
+//        if success != jint(JNI_OK) {
+//            report( "Could not attach to background jvm" )
+//        }
+//        return tenv
     }
 
     open func report( _ msg: String, _ file: StaticString = #file, _ line: Int = #line ) {
@@ -168,31 +193,33 @@ open class JNICore {
             (vmOptionsPtr) in
             var vmArgs = JavaVMInitArgs()
             vmArgs.version = jint(JNI_VERSION_1_6)
-            vmArgs.nOptions = jint(options?.count ?? 0)
-            vmArgs.options = vmOptionsPtr.baseAddress
+//            vmArgs.nOptions = jint(options?.count ?? 0)
+//            vmArgs.options = vmOptionsPtr.baseAddress
+//
+//            if let options: [String] = options {
+//                for i in 0..<vmOptionsPtr.count {
+//                    options[i].withCString {
+//                        (cString) in
+//                        vmOptionsPtr[i].optionString = strdup( cString.buffer )
+//                    }
+//                }
+//            }
+//
+//            var tenv: UnsafeMutablePointer<JNIEnv?>?
+//            if withPointerToRawPointer(to: &tenv, {
+//                JNI_CreateJavaVM( &self.jvm, $0, &vmArgs )
+//            } ) != jint(JNI_OK) {
+//                report( "JNI_CreateJavaVM failed", file, line )
+//                return false
+//            }
+//
+//            if pthread_setspecific( JNICore.envVarKey, tenv ) != 0 {
+//                JNI.report( "Could not set pthread specific tenv" )
+//            }
+//            self.api = self.env!.pointee!.pointee
 
-            if let options: [String] = options {
-                for i in 0..<vmOptionsPtr.count {
-                    options[i].withCString {
-                        (cString) in
-                        vmOptionsPtr[i].optionString = strdup( cString )
-                    }
-                }
-            }
-
-            var tenv: UnsafeMutablePointer<JNIEnv?>?
-            if withPointerToRawPointer(to: &tenv, {
-                JNI_CreateJavaVM( &self.jvm, $0, &vmArgs )
-            } ) != jint(JNI_OK) {
-                report( "JNI_CreateJavaVM failed", file, line )
-                return false
-            }
-
-            if pthread_setspecific( JNICore.envVarKey, tenv ) != 0 {
-                JNI.report( "Could not set pthread specific tenv" )
-            }
-            self.api = self.env!.pointee!.pointee
-            return true
+            fatalError("TODO: JNI_CreateJavaVM")
+            //return true
         }
 #endif
     }
